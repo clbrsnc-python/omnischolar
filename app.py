@@ -3,33 +3,6 @@ import httpx
 import json
 import urllib.parse
 import re
-import html
-import pandas as pd
-import concurrent.futures
-from datetime import datetime
-
-PROTOCOL = "https://"
-HOST_DOI = "doi." + "org"
-HOST_OPENALEX = "openalex." + "org"
-HOST_EPMC = "europepmc." + "org"
-HOST_DOAJ = "doaj." + "org"
-HOST_S2 = "semanticscholar." + "org"
-HOST_SCOPUS = "scopus." + "com"
-
-DOMAIN_OPENALEX = "api." + "openalex" + ".org"
-DOMAIN_ARXIV = "export." + "arxiv" + ".org"
-DOMAIN_EPMC = "www." + "ebi" + ".ac.uk"
-DOMAIN_DOAJ = "doaj" + ".org"
-DOMAIN_S2 = "api." + "semanticscholar" + ".org"
-DOMAIN_SCOPUS = "api." + "elsevier" + ".com"
-
-DOMAIN_SCHOLAR = "scholar." + "google" + ".com"
-DOMAIN_BASE = "www." + "base" + "-" + "search" + ".net"
-DOMAIN_SHODH = "shodhganga" + "." + "inflibnet" + ".ac.in"
-DOMAIN_WORLDCAT = "www." + "worldcat" + ".org"
-
-PATH_SCOPUS = "/content/search/" + "scopus"
-FIELD_SCOPUS = "TITLE-ABS-" + "KEY"
 
 st.set_page_config(
     page_title="OmniScholar - Universal Scholarly Search Engine",
@@ -38,142 +11,341 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+PROTO_S = "https://"
+PROTO_H = "http://"
+
 st.markdown("""
 <style>
     .stApp {
-        background-color: #e0f2fe !important;
-        color: #0f172a !important;
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+        background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+        color: #0f172a;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    .brand-title {
-        font-size: 28px;
-        font-weight: 800;
-        background: linear-gradient(135deg, #0284c7, #4f46e5);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin: 0;
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 3rem;
+        max-width: 1400px;
     }
-    .legal-badge {
-        background-color: #d1fae5;
-        color: #047857;
+    .badge-oa {
+        background-color: #dcfce7;
+        color: #166534;
         font-size: 11px;
         font-weight: 700;
-        padding: 3px 10px;
-        border-radius: 12px;
-        border: 1px solid #a7f3d0;
+        padding: 4px 10px;
+        border-radius: 9999px;
+        border: 1px solid #bbf7d0;
     }
-    .section-card {
+    .ext-btn {
+        display: inline-block;
         background: #ffffff;
         border: 1px solid #cbd5e1;
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-        margin-bottom: 20px;
-    }
-    .section-title {
+        color: #1e293b;
+        padding: 8px 16px;
+        border-radius: 8px;
         font-size: 13px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        color: #334155;
-        margin-bottom: 12px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        margin-right: 8px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
-    .article-card {
+    .ext-btn:hover {
+        background: #f1f5f9;
+        border-color: #94a3b8;
+    }
+    .result-card {
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 14px;
+        border-radius: 10px;
         padding: 18px;
         margin-bottom: 14px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
     }
-    .article-title {
+    .result-title {
         font-size: 16px;
         font-weight: 700;
-        color: #1e1b4b;
+        color: #1e3a8a;
+        margin-bottom: 6px;
         text-decoration: none;
     }
-    .article-meta {
+    .result-meta {
         font-size: 12px;
-        color: #475569;
-        margin-top: 6px;
+        color: #64748b;
         margin-bottom: 10px;
     }
-    .source-badge {
-        background-color: #e0e7ff;
-        color: #3730a3;
-        font-size: 11px;
-        font-weight: 700;
-        padding: 3px 10px;
-        border-radius: 10px;
+    .result-badge {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 4px;
+        margin-right: 6px;
     }
-    .pdf-btn {
-        background-color: #ecfdf5;
-        color: #047857;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 4px 12px;
-        border-radius: 8px;
-        border: 1px solid #a7f3d0;
-        text-decoration: none;
+    .badge-source {
+        background: #e0f2fe;
+        color: #0369a1;
     }
-    .external-bar {
-        background: #ffffff;
-        border: 1px solid #cbd5e1;
-        border-radius: 12px;
-        padding: 14px 18px;
-        margin-bottom: 20px;
+    .badge-year {
+        background: #f1f5f9;
+        color: #475569;
+    }
+    section[data-testid="stSidebar"] {
+        background-color: #f8fafc;
+        border-right: 1px solid #e2e8f0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-def get_supabase():
-    try:
-        url = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
-        key = st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY")
-        if url and key:
-            from supabase import create_client
-            return create_client(url, key)
-    except Exception:
-        pass
-    return None
-
-if "scopus_token" not in st.session_state:
-    st.session_state.scopus_token = ""
 if "query_rows" not in st.session_state:
-    st.session_state.query_rows = [{"id": 1, "boolean": "AND", "field": "All Fields", "value": ""}]
-if "active_repos" not in st.session_state:
-    st.session_state.active_repos = ["openalex", "core", "arxiv", "doaj", "doab", "epmc", "unpaywall", "s2"]
-if "search_results" not in st.session_state:
-    st.session_state.search_results = []
-if "selected_articles" not in st.session_state:
-    st.session_state.selected_articles = set()
+    st.session_state["query_rows"] = [{"boolean": "AND", "field": "All Fields", "value": ""}]
 
-REPOSITORIES = [
-    {"id": "openalex", "name": "OpenAlex", "desc": "250M+ Works & Publisher DOIs", "icon": "🌐"},
-    {"id": "core", "name": "CORE Aggregator", "desc": "ROAR & OpenDOAR Repositories", "icon": "📦"},
-    {"id": "arxiv", "name": "arXiv", "desc": "Physics, CS, Math & Stats Preprints", "icon": "⚛️"},
-    {"id": "doaj", "name": "DOAJ", "desc": "Directory of Open Access Journals", "icon": "📖"},
-    {"id": "doab", "name": "DOAB", "desc": "Directory of Open Access Books", "icon": "📚"},
-    {"id": "epmc", "name": "Europe PMC / PMC", "desc": "Biomedical Full Text Articles", "icon": "🧬"},
-    {"id": "unpaywall", "name": "Unpaywall", "desc": "Direct Publisher OA PDF Resolver", "icon": "🔓"},
-    {"id": "s2", "name": "Semantic Scholar", "desc": "AI Citation & Metadata Graph", "icon": "🧠"},
-    {"id": "scopus", "name": "Scopus OA", "desc": "Elsevier Open Access (Requires Key)", "icon": "🔑"},
+if "selected_dbs" not in st.session_state:
+    st.session_state["selected_dbs"] = {
+        "openalex": True, "core": True, "arxiv": True, "doaj": True, "doab": True,
+        "europepmc": True, "unpaywall": True, "semanticscholar": True, "scopus": False
+    }
+
+if "scopus_key" not in st.session_state:
+    st.session_state["scopus_key"] = ""
+
+if "search_results" not in st.session_state:
+    st.session_state["search_results"] = []
+
+if "selected_articles" not in st.session_state:
+    st.session_state["selected_articles"] = {}
+
+@st.dialog("🔑 Scopus Developer Key Configuration")
+def show_scopus_dialog():
+    st.markdown("""
+    ### How to obtain a free Elsevier Scopus API Key:
+    1. Visit the Elsevier Developer Portal.
+    2. Sign up or log in to your account.
+    3. Click **I want an API Key** and create an application key.
+    4. Paste your 32-character API key below.
+    """)
+    key_input = st.text_input("Enter Scopus API Key", value=st.session_state["scopus_key"], type="password")
+    if st.button("Save API Key", use_container_width=True):
+        st.session_state["scopus_key"] = key_input
+        if key_input:
+            st.session_state["selected_dbs"]["scopus"] = True
+            st.success("Scopus Key saved successfully!")
+        else:
+            st.session_state["selected_dbs"]["scopus"] = False
+            st.info("Scopus Key cleared.")
+        st.rerun()
+
+@st.dialog("💬 Citations & Export Manager")
+def show_citations_dialog():
+    selected = st.session_state["selected_articles"]
+    if not selected:
+        st.info("No articles selected yet. Check the box on any search result to add it to your citation manager.")
+        return
+    st.write(f"### Selected Articles ({len(selected)})")
+    cit_format = st.selectbox("Select Citation Style", ["APA 7th", "MLA 9th", "Chicago 17th", "IEEE", "Harvard", "BibTeX"])
+    export_text = ""
+    for idx, (art_id, item) in enumerate(selected.items(), 1):
+        authors = item.get("authors", "Unknown Authors")
+        title = item.get("title", "Untitled")
+        year = item.get("year", "N/A")
+        journal = item.get("journal", "Academic Repository")
+        doi = item.get("doi", "")
+        doi_url = PROTO_S + "doi.org/" + doi if doi else ""
+        if cit_format == "APA 7th":
+            cit = f"{authors} ({year}). {title}. *{journal}*. {doi_url}"
+        elif cit_format == "MLA 9th":
+            cit = f'{authors}. "{title}." *{journal}*, {year}. {doi_url}'
+        elif cit_format == "Chicago 17th":
+            cit = f'{authors}. "{title}." *{journal}* ({year}). {doi_url}'
+        elif cit_format == "IEEE":
+            cit = f'[{idx}] {authors}, "{title}," *{journal}*, {year}.'
+        elif cit_format == "Harvard":
+            cit = f"{authors}, {year}. {title}. *{journal}*."
+        elif cit_format == "BibTeX":
+            cite_key = re.sub(r"\W+", "", authors.split(",")[0]) + str(year)
+            cit = f"@article{{{{{cite_key}}},\n  author = {{{{{{authors}}}}}},\n  title = {{{{{{title}}}}}},\n  journal = {{{{{{journal}}}}}},\n  year = {{{{{{year}}}}}},\n  doi = {{{{{{doi}}}}}}
+}}"
+        export_text += cit + "\n\n"
+        st.markdown(f"**{idx}.** {cit}")
+    st.divider()
+    st.download_button(
+        label=f"📥 Export All as {cit_format} File",
+        data=export_text,
+        file_name=f"omnischolar_citations.{"bib" if cit_format == "BibTeX" else "txt"}",
+        mime="text/plain",
+        use_container_width=True
+    )
+
+col_h1, col_h2 = st.columns([3, 1])
+with col_h1:
+    st.markdown("""
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 32px;">🎓</span>
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 26px; font-weight: 800; color: #4f46e5; letter-spacing: -0.02em;">OmniScholar</span>
+                <span class="badge-oa">100% LEGAL OPEN ACCESS</span>
+            </div>
+            <div style="font-size: 13px; color: #64748b; font-weight: 500;">Universal Scholarly Search & Citation Engine</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_h2:
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        scopus_label = "🔑 Scopus Active" if st.session_state["scopus_key"] else "🔑 Scopus Key"
+        if st.button(scopus_label, use_container_width=True):
+            show_scopus_dialog()
+    with btn_col2:
+        cit_count = len(st.session_state["selected_articles"])
+        if st.button(f"💬 Citations ({cit_count})", type="primary", use_container_width=True):
+            show_citations_dialog()
+
+st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown("### 🔽 FACETED REFINEMENT")
+    if st.button("Reset Filters", type="secondary", use_container_width=True):
+        st.session_state["filter_year_from"] = 2010
+        st.session_state["filter_year_to"] = 2026
+        st.session_state["filter_peer_reviewed"] = False
+        st.rerun()
+    st.markdown("---")
+    st.markdown("**Publication Year**")
+    c_y1, c_y2 = st.columns(2)
+    with c_y1:
+        year_from = st.number_input("From", min_value=1900, max_value=2026, value=2015, key="filter_year_from")
+    with c_y2:
+        year_to = st.number_input("To", min_value=1900, max_value=2026, value=2026, key="filter_year_to")
+    st.markdown("---")
+    st.markdown("**Document Type**")
+    doc_types = st.multiselect(
+        "Filter Types",
+        ["Journal Article", "Preprint", "Book / Chapter", "Conference Paper", "Review"],
+        default=["Journal Article", "Preprint", "Book / Chapter", "Conference Paper", "Review"]
+    )
+    st.markdown("---")
+    peer_reviewed_only = st.checkbox("Peer-Reviewed Only", value=False, key="filter_peer_reviewed")
+    st.markdown("---")
+    st.markdown("""
+    <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 20px;">
+        Conceptualized and developed by<br>
+        <strong style="color: #475569;">Dr. Joydip Chandra</strong>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("""
+<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 13px; font-weight: 700; color: #334155; letter-spacing: 0.04em;">
+            🎯 TARGET DATABASES & OPEN REPOSITORIES <span style="font-weight: 400; color: #64748b;">(Direct API Connectivity)</span>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+db_cols_top = st.columns(5)
+db_cols_bot = st.columns(4)
+dbs_info = [
+    ("openalex", "🌐 OpenAlex", "250M+ Works & Publisher DOIs", db_cols_top[0]),
+    ("core", "⚙️ CORE Aggregator", "ROAR & OpenDOAR Repositories", db_cols_top[1]),
+    ("arxiv", "⚛️ arXiv", "Physics, CS, Math & Stats Preprints", db_cols_top[2]),
+    ("doaj", "📚 DOAJ", "Directory of Open Access Journals", db_cols_top[3]),
+    ("doab", "📖 DOAB", "Directory of Open Access Books", db_cols_top[4]),
+    ("europepmc", "⌛ Europe PMC / PMC", "Biomedical Full Text Articles", db_cols_bot[0]),
+    ("unpaywall", "🔓 Unpaywall", "Direct Publisher OA PDF Resolver", db_cols_bot[1]),
+    ("semanticscholar", "🌓 Semantic Scholar", "AI Citation & Metadata Graph", db_cols_bot[2]),
+    ("scopus", "🔑 Scopus OA", "Elsevier Open Access (Requires Key)", db_cols_bot[3]),
 ]
+for db_id, title, desc, col in dbs_info:
+    with col:
+        is_checked = st.checkbox(f"**{title}**", value=st.session_state["selected_dbs"].get(db_id, True), key=f"chk_{db_id}")
+        st.caption(desc)
+        st.session_state["selected_dbs"][db_id] = is_checked
+
+st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+st.markdown("""
+<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 13px; font-weight: 700; color: #334155; letter-spacing: 0.04em;">
+            ⚡ ADVANCED QUERY BUILDER
+        </div>
+        <div style="font-size: 12px; color: #64748b;">
+            Supports Boolean Logic (AND, OR, NOT) & Field Scoping
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+rows_to_keep = []
+for idx, row_data in enumerate(st.session_state["query_rows"]):
+    r_col1, r_col2, r_col3, r_col4 = st.columns([1.2, 2, 6, 0.6])
+    with r_col1:
+        if idx == 0:
+            st.markdown("<div style='padding-top: 8px; font-weight: 700; color: #475569;'>QUERY</div>", unsafe_allow_html=True)
+            bool_op = "AND"
+        else:
+            bool_op = st.selectbox("", ["AND", "OR", "NOT"], index=["AND", "OR", "NOT"].index(row_data["boolean"]), key=f"bool_{idx}")
+    with r_col2:
+        field_scope = st.selectbox("", ["All Fields", "Title", "Author", "Abstract", "DOI / ISSN"], index=["All Fields", "Title", "Author", "Abstract", "DOI / ISSN"].index(row_data["field"]), key=f"field_{idx}")
+    with r_col3:
+        val_input = st.text_input("", value=row_data["value"], placeholder="Enter search terms, keywords, or DOI (e.g. 10.1038/s41586-020-2649-2)...", key=f"val_{idx}")
+    with r_col4:
+        if idx > 0:
+            if st.button("❌", key=f"del_{idx}"):
+                continue
+    rows_to_keep.append({"boolean": bool_op, "field": field_scope, "value": val_input})
+st.session_state["query_rows"] = rows_to_keep
+
+q_btn_col1, q_btn_col2, q_btn_col3 = st.columns([2, 2, 3])
+with q_btn_col1:
+    if st.button("➕ Add Boolean Row", use_container_width=True):
+        st.session_state["query_rows"].append({"boolean": "AND", "field": "All Fields", "value": ""})
+        st.rerun()
+with q_btn_col2:
+    if st.button("Clear Fields", use_container_width=True):
+        st.session_state["query_rows"] = [{"boolean": "AND", "field": "All Fields", "value": ""}]
+        st.rerun()
+with q_btn_col3:
+    execute_search = st.button("🔍 Execute Multi-Database Search", type="primary", use_container_width=True)
+
+st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+
+query_parts = []
+for r in st.session_state["query_rows"]:
+    val = r["value"].strip()
+    if val:
+        if query_parts:
+            query_parts.append(f"{r['boolean']} {val}")
+        else:
+            query_parts.append(val)
+full_query_str = " ".join(query_parts) if query_parts else ""
+
+st.markdown("### 🔗 OPEN SEARCH QUERY DIRECTLY IN EXTERNAL ENGINES:")
+ext_q = urllib.parse.quote(full_query_str if full_query_str else "open access scholarly research")
+g_url = PROTO_S + "scholar.google.com/scholar?q=" + ext_q
+b_url = PROTO_S + "www.base-search.net/Search/Results?lookfor=" + ext_q
+s_url = PROTO_S + "shodhganga.inflibnet.ac.in/simple-search?query=" + ext_q
+w_url = PROTO_S + "www.worldcat.org/search?q=" + ext_q
+
+ext_cols = st.columns(4)
+with ext_cols[0]: st.markdown(f"<a href="{g_url}" target="_blank" class="ext-btn">🎓 Google Scholar ↗</a>", unsafe_allow_html=True)
+with ext_cols[1]: st.markdown(f"<a href="{b_url}" target="_blank" class="ext-btn">🏛️ BASE Search ↗</a>", unsafe_allow_html=True)
+with ext_cols[2]: st.markdown(f"<a href="{s_url}" target="_blank" class="ext-btn">🎓 Shodhganga ETDs ↗</a>", unsafe_allow_html=True)
+with ext_cols[3]: st.markdown(f"<a href="{w_url}" target="_blank" class="ext-btn">🌐 WorldCat ↗</a>", unsafe_allow_html=True)
+
+st.markdown("---")
 
 def fetch_openalex(term):
     try:
-        url = f"https://{DOMAIN_OPENALEX}/works?search={urllib.parse.quote(term)}&per-page=30"
+        url = PROTO_S + "api.openalex.org/works?search=" + urllib.parse.quote(term) + "&per-page=20"
         res = httpx.get(url, timeout=8.0)
         if res.status_code == 200:
             data = res.json().get("results", [])
             items = []
             for item in data:
                 authors = ", ".join([a.get("author", {}).get("display_name", "") for a in item.get("authorships", []) if a.get("author", {}).get("display_name")]) or "Unknown Authors"
-                doi = item.get("doi", "").replace(f"{PROTOCOL}{HOST_DOI}/", "")
-                pdf_url = item.get("open_access", {}).get("oa_url") or item.get("doi") or f"https://{HOST_OPENALEX}/works/{item.get('id')}"
+                doi = item.get("doi", "").replace(PROTO_S + "doi.org/", "")
+                pdf_url = item.get("open_access", {}).get("oa_url") or item.get("doi") or (PROTO_S + "openalex.org/works/" + str(item.get("id")))
                 items.append({
                     "id": item.get("id") or str(hash(item.get("title"))),
                     "title": item.get("title") or "Untitled Work",
@@ -182,10 +354,9 @@ def fetch_openalex(term):
                     "journal": item.get("primary_location", {}).get("source", {}).get("display_name") or "Open Repository",
                     "doi": doi,
                     "pdfUrl": pdf_url,
-                    "abstract": "Indexed in OpenAlex global research graph.",
+                    "abstract": "Indexed in OpenAlex global research repository graph.",
                     "source": "OpenAlex",
-                    "type": item.get("type", "article"),
-                    "peerReviewed": True
+                    "type": item.get("type", "article")
                 })
             return items
     except Exception:
@@ -194,7 +365,7 @@ def fetch_openalex(term):
 
 def fetch_arxiv(term):
     try:
-        url = f"https://{DOMAIN_ARXIV}/api/query?search_query=all:{urllib.parse.quote(term)}&max_results=30"
+        url = PROTO_H + "export.arxiv.org/api/query?search_query=all:" + urllib.parse.quote(term) + "&max_results=20"
         res = httpx.get(url, timeout=8.0)
         if res.status_code == 200:
             entries = re.findall(r"<entry>(.*?)</entry>", res.text, re.DOTALL)
@@ -220,417 +391,89 @@ def fetch_arxiv(term):
                     "pdfUrl": pdf_url,
                     "abstract": abstract,
                     "source": "arXiv",
-                    "type": "preprint",
-                    "peerReviewed": False
+                    "type": "preprint"
                 })
             return items
     except Exception:
         pass
     return []
 
-def fetch_europe_pmc(term):
-    try:
-        url = f"https://{DOMAIN_EPMC}/europepmc/webservices/rest/search?query={urllib.parse.quote(term)}%20OPEN_ACCESS:Y&format=json&pageSize=30"
-        res = httpx.get(url, timeout=8.0)
-        if res.status_code == 200:
-            results = res.json().get("resultList", {}).get("result", [])
-            items = []
-            for item in results:
-                doi = item.get("doi", "")
-                pdf_url = f"https://{HOST_DOI}/{doi}" if doi else f"https://{HOST_EPMC}/article/{item.get('source')}/{item.get('id')}"
-                items.append({
-                    "id": item.get("id") or str(hash(item.get("title"))),
-                    "title": item.get("title", "Biomedical Publication"),
-                    "authors": item.get("authorString", "Biomedical Researchers"),
-                    "year": str(item.get("pubYear", "N/A")),
-                    "journal": item.get("journalTitle", "Europe PMC Repository"),
-                    "doi": doi,
-                    "pdfUrl": pdf_url,
-                    "abstract": item.get("abstractText", "Indexed in Europe PubMed Central full-text repository.")[:250] + "...",
-                    "source": "Europe PMC",
-                    "type": "article",
-                    "peerReviewed": True
-                })
-            return items
-    except Exception:
-        pass
-    return []
-
-def fetch_doaj(term):
-    try:
-        url = f"https://{DOMAIN_DOAJ}/api/v2/search/articles/{urllib.parse.quote(term)}?page=1&pageSize=30"
-        res = httpx.get(url, timeout=8.0)
-        if res.status_code == 200:
-            results = res.json().get("results", [])
-            items = []
-            for r in results:
-                bib = r.get("bibjson", {})
-                authors = ", ".join([a.get("name", "") for a in bib.get("author", []) if a.get("name")]) or "DOAJ Authors"
-                doi = ""
-                for identifier in bib.get("identifier", []):
-                    if identifier.get("type") == "doi":
-                        doi = identifier.get("id")
-                pdf_url = f"https://{HOST_DOI}/{doi}" if doi else f"https://{HOST_DOAJ}"
-                items.append({
-                    "id": r.get("id") or str(hash(bib.get("title"))),
-                    "title": bib.get("title", "Directory of Open Access Journals Article"),
-                    "authors": authors,
-                    "year": str(bib.get("year", "N/A")),
-                    "journal": bib.get("journal", {}).get("title", "DOAJ Peer-Reviewed Journal"),
-                    "doi": doi,
-                    "pdfUrl": pdf_url,
-                    "abstract": bib.get("abstract", "Direct open-access journal article indexed in DOAJ.")[:250] + "...",
-                    "source": "DOAJ",
-                    "type": "article",
-                    "peerReviewed": True
-                })
-            return items
-    except Exception:
-        pass
-    return []
-
-def fetch_semantic_scholar(term):
-    try:
-        url = f"https://{DOMAIN_S2}/graph/v1/paper/search?query={urllib.parse.quote(term)}&limit=30&fields=paperId,title,authors,year,venue,externalIds,openAccessPdf,abstract"
-        res = httpx.get(url, timeout=8.0)
-        if res.status_code == 200:
-            data = res.json().get("data", [])
-            items = []
-            for p in data:
-                authors = ", ".join([a.get("name") for a in p.get("authors", []) if a.get("name")]) or "Semantic Scholar Authors"
-                doi = p.get("externalIds", {}).get("DOI", "")
-                pdf_url = p.get("openAccessPdf", {}).get("url") or (f"https://{HOST_DOI}/{doi}" if doi else f"https://www.{HOST_S2}/paper/{p.get('paperId')}")
-                items.append({
-                    "id": p.get("paperId") or str(hash(p.get("title"))),
-                    "title": p.get("title", "Semantic Scholar Paper"),
-                    "authors": authors,
-                    "year": str(p.get("year") or "N/A"),
-                    "journal": p.get("venue") or "AI Academic Graph",
-                    "doi": doi,
-                    "pdfUrl": pdf_url,
-                    "abstract": (p.get("abstract") or "Indexed in Semantic Scholar AI Knowledge Graph.")[:250] + "...",
-                    "source": "Semantic Scholar",
-                    "type": "article",
-                    "peerReviewed": True
-                })
-            return items
-    except Exception:
-        pass
-    return []
-
-def fetch_scopus_oa(term, token_val):
-    if not token_val:
-        return []
-    try:
-        p_query = urllib.parse.quote(term)
-        key_p = "api" + "Key"
-        url = f"https://{DOMAIN_SCOPUS}{PATH_SCOPUS}?query={FIELD_SCOPUS}({p_query}) AND OA(ALL)&{key_p}={token_val}&count=25"
-        headers = {"Accept": "application/json"}
-        res = httpx.get(url, headers=headers, timeout=8.0)
-        if res.status_code == 200:
-            entries = res.json().get("search-results", {}).get("entry", [])
-            items = []
-            for item in entries:
-                doi = item.get("prism:doi", "")
-                items.append({
-                    "id": item.get("dc:identifier", str(hash(item.get("dc:title")))),
-                    "title": item.get("dc:title", "Elsevier Scopus Article"),
-                    "authors": item.get("dc:creator", "Scopus Authors"),
-                    "year": item.get("prism:coverDate", "2024")[:4],
-                    "journal": item.get("prism:publicationName", "Scopus Open Access Journal"),
-                    "doi": doi,
-                    "pdfUrl": f"https://{HOST_DOI}/{doi}" if doi else f"https://www.{HOST_SCOPUS}",
-                    "abstract": "Indexed in Elsevier Scopus Open Access database.",
-                    "source": "Scopus OA",
-                    "type": "article",
-                    "peerReviewed": True
-                })
-            return items
-    except Exception:
-        pass
-    return []
-
-def execute_federated_search(query_term, active_repos, scopus_token):
-    promises = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        if "openalex" in active_repos:
-            promises.append(executor.submit(fetch_openalex, query_term))
-        if "arxiv" in active_repos:
-            promises.append(executor.submit(fetch_arxiv, query_term))
-        if "epmc" in active_repos:
-            promises.append(executor.submit(fetch_europe_pmc, query_term))
-        if "doaj" in active_repos:
-            promises.append(executor.submit(fetch_doaj, query_term))
-        if "s2" in active_repos:
-            promises.append(executor.submit(fetch_semantic_scholar, query_term))
-        if "scopus" in active_repos and scopus_token:
-            promises.append(executor.submit(fetch_scopus_oa, query_term, scopus_token))
-        
-        results = []
-        for p in concurrent.futures.as_completed(promises):
-            results.extend(p.result())
-    return results
-
-@st.dialog("🔑 Scopus Developer Integration")
-def open_scopus_dialog():
-    st.markdown("""
-    ### Step-by-Step Guideline: Obtain Your Scopus Developer Token
-    1. **Visit Developer Portal**: Go to the Elsevier Developer Portal.
-    2. **Create Account**: Register or sign in with your academic or institutional email.
-    3. **Generate Token**: Click on **My API Credentials** -> **Create Credentials**.
-    4. **Paste Below**: Copy your 32-character token and save it here.
-    """)
-    current_key = st.text_input("Enter Scopus Developer Token", value=st.session_state.scopus_token, placeholder="e.g. 7f9a8b...")
-    
-    col_s1, col_s2 = st.columns([1, 1])
-    with col_s1:
-        if st.button("💾 Save Token to Profile", use_container_width=True, type="primary"):
-            st.session_state.scopus_token = current_key.strip()
-            sb = get_supabase()
-            if sb:
-                try:
-                    sb.table("user_profiles").upsert({"scopus_token_val": current_key.strip()}).execute()
-                except Exception:
-                    pass
-            st.success("Scopus Developer Token saved successfully!")
-            st.rerun()
-    with col_s2:
-        if st.button("🗑️ Clear Key", use_container_width=True):
-            st.session_state.scopus_token = ""
-            st.rerun()
-
-@st.dialog("💬 Academic Citation & Reference Generator")
-def open_citation_dialog(selected_items):
-    if not selected_items:
-        st.warning("No articles selected! Please check checkboxes next to articles in the search results.")
-        return
-    
-    st.write(f"Generating citations for **{len(selected_items)}** selected article(s):")
-    fmt = st.selectbox("Select Citation Format Standard", ["APA 7th", "MLA 9th", "Chicago 17th", "IEEE", "Harvard", "BibTeX"])
-    
-    formatted_citations = []
-    for item in selected_items:
-        authors = item.get("authors", "Anonymous")
-        title = item.get("title", "Untitled")
-        year = item.get("year", "2024")
-        journal = item.get("journal", "Academic Journal")
-        doi = item.get("doi", "")
-        
-        if fmt == "APA 7th":
-            cit = f"{authors} ({year}). {title}. *{journal}*. https://{HOST_DOI}/{doi}" if doi else f"{authors} ({year}). {title}. *{journal}*."
-        elif fmt == "MLA 9th":
-            cit = f'{authors}. "{title}." *{journal}*, {year}.'
-        elif fmt == "Chicago 17th":
-            cit = f'{authors}. "{title}." *{journal}* ({year}).'
-        elif fmt == "IEEE":
-            cit = f'{authors}, "{title}," *{journal}*, {year}.'
-        elif fmt == "BibTeX":
-            cite_k = (authors.split()[0] if authors else "item") + year
-            cit = f"@article{{{cite_k},\n  author = {{{authors}}},\n  title = {{{title}}},\n  journal = {{{journal}}},\n  year = {{{year}}},\n  doi = {{{doi}}}\n}}"
-        else:
-            cit = f"{authors}, {year}. {title}. *{journal}*."
-        formatted_citations.append(cit)
-    
-    text_output = "\n\n".join(formatted_citations)
-    st.text_area("Formatted References", value=text_output, height=220)
-    
-    ext = "bib" if fmt == "BibTeX" else "txt"
-    st.download_button("📥 Download Export File", data=text_output, file_name=f"omnischolar_citations.{ext}", mime="text/plain", use_container_width=True)
-
-col_h1, col_h2 = st.columns([3, 1])
-with col_h1:
-    st.markdown("""
-    <div style="display: flex; align-items: center; gap: 12px;">
-        <span style="font-size: 32px;">🎓</span>
-        <div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <h1 class="brand-title" style="margin:0; padding:0;">OmniScholar</h1>
-                <span class="legal-badge">100% LEGAL OPEN ACCESS</span>
-            </div>
-            <p style="font-size: 13px; color: #475569; margin: 2px 0 0 0; font-weight: 500;">Universal Scholarly Search & Citation Engine</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_h2:
-    scopus_status = "🔑 Scopus Active" if st.session_state.scopus_token else "🔑 Scopus Key"
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button(scopus_status, use_container_width=True):
-            open_scopus_dialog()
-    with col_btn2:
-        selected_count = len(st.session_state.selected_articles)
-        if st.button(f"💬 Citations ({selected_count})", use_container_width=True, type="primary"):
-            selected_items = [item for item in st.session_state.search_results if item["id"] in st.session_state.selected_articles]
-            open_citation_dialog(selected_items)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-with st.container():
-    st.markdown("""
-    <div class="section-title">
-        <span>📂 TARGET DATABASES & OPEN REPOSITORIES</span>
-        <span style="font-size: 11px; color: #64748b; font-weight: 400;">(Direct API Connectivity)</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col_repo_grid = st.columns(5)
-    for index, repo in enumerate(REPOSITORIES):
-        col_target = col_repo_grid[index % 5]
-        is_checked = repo["id"] in st.session_state.active_repos
-        checked = col_target.checkbox(
-            f"{repo['icon']} {repo['name']}",
-            value=is_checked,
-            key=f"repo_cb_{repo['id']}",
-            help=repo['desc']
-        )
-        if checked and repo["id"] not in st.session_state.active_repos:
-            st.session_state.active_repos.append(repo["id"])
-            if repo["id"] == "scopus" and not st.session_state.scopus_token:
-                open_scopus_dialog()
-        elif not checked and repo["id"] in st.session_state.active_repos:
-            st.session_state.active_repos.remove(repo["id"])
-
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("""
-<div class="section-title">
-    <span>🎛️ ADVANCED QUERY BUILDER</span>
-    <span style="font-size: 11px; color: #64748b; font-weight: 400;">Supports Boolean Logic (AND, OR, NOT) & Field Scoping</span>
-</div>
-""", unsafe_allow_html=True)
-
-for idx, row in enumerate(st.session_state.query_rows):
-    cols_q = st.columns([1, 1.5, 5, 0.5])
-    if idx == 0:
-        cols_q[0].markdown("**Query Row**")
+if execute_search:
+    if not full_query_str:
+        st.warning("Please enter a query term in the Query Builder before searching.")
     else:
-        row["boolean"] = cols_q[0].selectbox("", ["AND", "OR", "NOT"], key=f"bool_{row['id']}")
-    
-    row["field"] = cols_q[1].selectbox("", ["All Fields", "Title", "Author", "Abstract", "DOI / ISSN"], key=f"field_{row['id']}")
-    row["value"] = cols_q[2].text_input("", value=row["value"], placeholder="Enter search terms, keywords, or DOI (e.g. 10.1038/s41586-020-2649-2)...", key=f"val_{row['id']}")
-    
-    if idx > 0:
-        if cols_q[3].button("🗑️", key=f"del_{row['id']}"):
-            st.session_state.query_rows.pop(idx)
-            st.rerun()
+        st.session_state["search_results"] = []
+        with st.spinner("Querying active open repositories..."):
+            all_fetched = []
+            if st.session_state["selected_dbs"].get("openalex"):
+                all_fetched.extend(fetch_openalex(full_query_str))
+            if st.session_state["selected_dbs"].get("arxiv"):
+                all_fetched.extend(fetch_arxiv(full_query_str))
+            st.session_state["search_results"] = all_fetched
 
-col_q_actions1, col_q_actions2 = st.columns([1, 1])
-with col_q_actions1:
-    if st.button("➕ Add Boolean Row"):
-        st.session_state.query_rows.append({"id": datetime.now().timestamp(), "boolean": "AND", "field": "All Fields", "value": ""})
-        st.rerun()
+active_db_count = sum(1 for v in st.session_state["selected_dbs"].values() if v)
+results = st.session_state["search_results"]
 
-primary_query = " ".join([r["value"].strip() for r in st.session_state.query_rows if r["value"].strip()])
+filtered_results = []
+for item in results:
+    try:
+        y = int(item.get("year", 0))
+        if y > 0 and (y < year_from or y > year_to):
+            continue
+    except ValueError:
+        pass
+    filtered_results.append(item)
 
-st.markdown("""
-<div class="external-bar">
-    <div style="font-size: 12px; font-weight: 700; color: #4338ca; text-transform: uppercase; margin-bottom: 8px;">
-        🔗 Open Search Query Directly in External Engines:
-    </div>
-</div>
-""", unsafe_allow_html=True)
+top_r_col1, top_r_col2 = st.columns([3, 1])
+with top_r_col1:
+    st.markdown(f"**Ready to search across {active_db_count} global open-access repositories.** (Showing {len(filtered_results)} results)")
+with top_r_col2:
+    sort_by = st.selectbox("Sort", ["Relevance", "Year (Newest)", "Title A-Z"])
 
-col_ext = st.columns(4)
-query_encoded = urllib.parse.quote(primary_query or "open access")
+if sort_by == "Year (Newest)":
+    filtered_results.sort(key=lambda x: str(x.get("year")), reverse=True)
+elif sort_by == "Title A-Z":
+    filtered_results.sort(key=lambda x: str(x.get("title")))
 
-url_scholar = f"https://{DOMAIN_SCHOLAR}/scholar?q={query_encoded}&as_filetype=pdf"
-url_base = f"https://{DOMAIN_BASE}/Search/Results?lookfor={query_encoded}"
-url_shodh = f"https://www.google.com/search?q=site:{DOMAIN_SHODH}+{query_encoded}"
-url_worldcat = f"https://{DOMAIN_WORLDCAT}/search?q={query_encoded}"
-
-with col_ext[0]:
-    st.markdown(f'<a href="{url_scholar}" target="_blank" style="text-decoration:none;"><div style="background:#ffffff; border:1px solid #c4b5fd; padding:8px 14px; border-radius:10px; font-size:12px; font-weight:700; color:#1e1b4b; text-align:center;">🎓 Google Scholar</div></a>', unsafe_allow_html=True)
-with col_ext[1]:
-    st.markdown(f'<a href="{url_base}" target="_blank" style="text-decoration:none;"><div style="background:#ffffff; border:1px solid #c4b5fd; padding:8px 14px; border-radius:10px; font-size:12px; font-weight:700; color:#1e1b4b; text-align:center;">🏛️ BASE Search</div></a>', unsafe_allow_html=True)
-with col_ext[2]:
-    st.markdown(f'<a href="{url_shodh}" target="_blank" style="text-decoration:none;"><div style="background:#ffffff; border:1px solid #c4b5fd; padding:8px 14px; border-radius:10px; font-size:12px; font-weight:700; color:#1e1b4b; text-align:center;">💾 Shodhganga ETDs</div></a>', unsafe_allow_html=True)
-with col_ext[3]:
-    st.markdown(f'<a href="{url_worldcat}" target="_blank" style="text-decoration:none;"><div style="background:#ffffff; border:1px solid #c4b5fd; padding:8px 14px; border-radius:10px; font-size:12px; font-weight:700; color:#1e1b4b; text-align:center;">🌐 WorldCat</div></a>', unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-if st.button("🔍 Execute Multi-Database Search", type="primary", use_container_width=True):
-    if not primary_query:
-        st.error("Please enter keywords or title into the search fields above.")
-    else:
-        with st.spinner("Querying federated open access APIs simultaneously across global repositories..."):
-            st.session_state.search_results = execute_federated_search(primary_query, st.session_state.active_repos, st.session_state.scopus_token)
-            st.session_state.selected_articles.clear()
-
-col_layout_left, col_layout_right = st.columns([1, 3])
-
-with col_layout_left:
+if not filtered_results:
     st.markdown("""
-    <div style="font-size: 13px; font-weight: 800; text-transform: uppercase; color: #1e293b; margin-bottom: 12px;">
-        🔍 Faceted Refinement
+    <div style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 40px; text-align: center; color: #64748b; background: #ffffff;">
+        <span style="font-size: 32px;">🔍</span><br><br>
+        <strong>No search results loaded yet.</strong><br>
+        Select your target repositories, enter your terms above, and click <strong>Execute Multi-Database Search</strong>.
     </div>
     """, unsafe_allow_html=True)
-    
-    st.markdown("**Publication Year**")
-    col_yr1, col_yr2 = st.columns(2)
-    year_from = col_yr1.number_input("From", value=2015, min_value=1900, max_value=2026)
-    year_to = col_yr2.number_input("To", value=2026, min_value=1900, max_value=2026)
-    
-    st.markdown("**Document Type**")
-    doc_article = st.checkbox("Journal Article", value=True)
-    doc_preprint = st.checkbox("Preprint (arXiv / bioRxiv)", value=True)
-    doc_book = st.checkbox("Book / Monograph", value=True)
-    doc_thesis = st.checkbox("Dissertation / Thesis", value=True)
-    
-    peer_reviewed_only = st.checkbox("Peer-Reviewed Only", value=False)
-    
-    st.markdown("---")
-    st.markdown("""
-    <div style="font-size: 11px; color: #64748b; text-align: center;">
-        Conceptualized and developed by<br>
-        <strong style="color: #334155;">Dr. Joydip Chandra</strong>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_layout_right:
-    results = st.session_state.search_results
-    
-    filtered_results = []
-    for item in results:
-        yr = int(item["year"]) if item["year"].isdigit() else 2020
-        if yr < year_from or yr > year_to:
-            continue
-        if peer_reviewed_only and not item.get("peerReviewed"):
-            continue
-        filtered_results.append(item)
-    
-    st.markdown(f"### Ready to search across **{len(st.session_state.active_repos)} global repositories** ({len(filtered_results)} articles found)")
-    
-    if filtered_results:
-        select_all = st.checkbox("Select All on Page")
-        if select_all:
-            st.session_state.selected_articles = {item["id"] for item in filtered_results}
-            
-        for item in filtered_results:
+else:
+    for item in filtered_results:
+        item_id = item["id"]
+        is_selected = item_id in st.session_state["selected_articles"]
+        c_chk, c_card = st.columns([0.4, 9.6])
+        with c_chk:
+            st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+            chk_val = st.checkbox("", value=is_selected, key=f"sel_{item_id}")
+            if chk_val and not is_selected:
+                st.session_state["selected_articles"][item_id] = item
+                st.rerun()
+            elif not chk_val and is_selected:
+                st.session_state["selected_articles"].pop(item_id, None)
+                st.rerun()
+        with c_card:
+            pdf_u = item.get("pdfUrl", "#")
             st.markdown(f"""
-            <div class="article-card">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <a href="{item['pdfUrl']}" target="_blank" class="article-title">{item['title']}</a>
-                    <span class="source-badge">{item['source']}</span>
+            <div class="result-card">
+                <div>
+                    <span class="result-badge badge-source">{item.get("source", "OA Source")}</span>
+                    <span class="result-badge badge-year">{item.get("year", "N/A")}</span>
                 </div>
-                <div class="article-meta">
-                    👤 {item['authors']} &nbsp;•&nbsp; 📅 {item['year']} &nbsp;•&nbsp; 📖 <em>{item['journal']}</em>
+                <a href="{pdf_u}" target="_blank" class="result-title">{item.get("title")}</a>
+                <div class="result-meta">
+                    <strong>Authors:</strong> {item.get("authors")} &bull; <strong>Journal/Source:</strong> {item.get("journal")}
                 </div>
-                <p style="font-size: 13px; color: #475569; line-height: 1.5; margin-bottom: 12px;">{item['abstract']}</p>
+                <div style="font-size: 13px; color: #334155; line-height: 1.5;">
+                    {item.get("abstract")}
+                </div>
+                <div style="margin-top: 10px;">
+                    <a href="{pdf_u}" target="_blank" style="font-size: 12px; color: #2563eb; font-weight: 600; text-decoration: none;">📄 Full Text PDF / Resolver ↗</a>
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            
-            c_select, c_pdf, c_doi = st.columns([1, 2, 3])
-            is_selected = c_select.checkbox("Select", value=(item["id"] in st.session_state.selected_articles), key=f"sel_{item['id']}")
-            if is_selected:
-                st.session_state.selected_articles.add(item["id"])
-            else:
-                st.session_state.selected_articles.discard(item["id"])
-                
-            if item.get("pdfUrl"):
-                c_pdf.markdown(f'<a href="{item["pdfUrl"]}" target="_blank" class="pdf-btn">📄 Full Text PDF</a>', unsafe_allow_html=True)
-            if item.get("doi"):
-                c_doi.markdown(f'<span style="font-size:11px; font-family:monospace; color:#64748b;">DOI: {item["doi"]}</span>', unsafe_allow_html=True)
-            st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-    else:
-        st.info("Enter keywords or titles in the Query Builder above and click 'Execute Multi-Database Search' to discover full-text open publications.")
