@@ -5,6 +5,3 @@ secondaryBackgroundColor = "#ffffff"
 textColor = "#0f172a"
 font = "Times New Roman"
 
-[server]
-headless = true
-port = 8501
